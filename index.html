@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MONEY AZ - Plataforma VIP Financeira</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- FontAwesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+theme: {
+extend: {
+colors: {
+gold: {
+400: '#FBBF24',
+500: '#F59E0B',
+600: '#D97706',
+700: '#B45309',
+},
+dark: {
+base: '#0B0C10',
+card: '#161822',
+border: '#2A2D3D',
+input: '#1A1D29'
+}
+},
+fontFamily: {
+sans: ['Plus Jakarta Sans', 'sans-serif'],
+}
+}
+}
+}
+</script>
+<style>
+body {
+background-color: #0B0C10;
+color: #F3F4F6;
+font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.gold-gradient {
+background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+}
+.gold-gradient-text {
+background: linear-gradient(135deg, #FBBF24 0%, #D97706 100%);
+-webkit-background-clip: text;
+-webkit-text-fill-color: transparent;
+}
+.card-glow {
+box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.15);
+}
+.custom-scrollbar::-webkit-scrollbar {
+width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+background: #0B0C10;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+background: #2A2D3D;
+border-radius: 4px;
+}
+@keyframes marquee {
+0% { transform: translateX(0%); }
+100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+display: inline-block;
+white-space: nowrap;
+animation: marquee 25s linear infinite;
+}
+</style>
+<!-- Firebase SDK v11 (Module) -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+window.FirebaseApp = null;
+window.FirebaseDB = null;
+window.FirebaseAuth = null;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'money-az-default';
+const rawConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+if (rawConfig) {
+try {
+const config = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+window.FirebaseApp = initializeApp(config);
+window.FirebaseDB = getFirestore(window.FirebaseApp);
+window.FirebaseAuth = getAuth(window.FirebaseApp);
+const initAuth = async () => {
+try {
+if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+await signInWithCustomToken(window.FirebaseAuth, __initial_auth_token);
+} else {
+await signInAnonymously(window.FirebaseAuth);
+}
+} catch (e) {
+console.warn('Firebase Auth Fallback:', e);
+}
+};
+initAuth();
+window.FS_USERS_COL = collection(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'users');
+window.FS_DEPOSITS_COL = collection(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'deposits');
+window.FS_WITHDRAWALS_COL = collection(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'withdrawals');
+window.FS_SETTINGS_DOC = doc(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'settings', 'config');
+window.FS_VIPS_DOC = doc(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'vips', 'packages');
+// Live Listeners
+onSnapshot(window.FS_USERS_COL, (snapshot) => {
+const loadedUsers = [];
+snapshot.forEach(docSnap => loadedUsers.push(docSnap.data()));
+if (loadedUsers.length > 0) {
+window.state.users = loadedUsers;
+if (window.state.currentUser) {
+const updatedMe = loadedUsers.find(u => u.id === window.state.currentUser.id);
+if (updatedMe) window.state.currentUser = updatedMe;
+}
+window.updateUI();
+}
+});
+onSnapshot(window.FS_DEPOSITS_COL, (snapshot) => {
+const loadedDeposits = [];
+snapshot.forEach(docSnap => loadedDeposits.push(docSnap.data()));
+window.state.deposits = loadedDeposits.sort((a,b) => b.timestamp - a.timestamp);
+window.updateUI();
+});
+onSnapshot(window.FS_WITHDRAWALS_COL, (snapshot) => {
+const loadedWithdrawals = [];
+snapshot.forEach(docSnap => loadedWithdrawals.push(docSnap.data()));
+window.state.withdrawals = loadedWithdrawals.sort((a,b) => b.timestamp - a.timestamp);
+window.updateUI();
+});
+onSnapshot(window.FS_SETTINGS_DOC, (docSnap) => {
+if (docSnap.exists()) {
+window.state.settings = docSnap.data();
+window.updateUI();
+}
+});
+onSnapshot(window.FS_VIPS_DOC, (docSnap) => {
+if (docSnap.exists() && docSnap.data().packages) {
+window.state.vipPackages = docSnap.data().packages;
+window.renderVIPPackages();
+window.renderAdminVIPEditors();
+}
+});
+} catch (err) {
+console.error("Firebase Initialization Failed:", err);
+}
+}
+</script>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-black">
+<!-- Toast Notifications -->
+<div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col space-y-2 max-w-xs w-full pointer-events-none"></div>
+<!-- AUTHENTICATION SCREEN (OVERLAY IF NOT LOGGED IN) -->
+<div id="auth-screen" class="fixed inset-0 z-40 bg-dark-base flex items-center justify-center p-4">
+<div class="w-full max-w-md bg-dark-card border border-dark-border rounded-2xl p-6 shadow-2xl space-y-6 card-glow">
+<div class="text-center space-y-2">
+<div class="w-16 h-16 gold-gradient rounded-2xl mx-auto flex items-center justify-center text-black text-2xl font-black shadow-lg">
+AZ
+</div>
+<h1 class="text-2xl font-extrabold gold-gradient-text tracking-wide">MONEY AZ VIP</h1>
+<p class="text-xs text-gray-400">Acesse a sua conta financeira de investimentos</p>
+</div>
+<!-- Login Form -->
+<form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">NÚMERO DE TELEFONE</label>
+<div class="relative">
+<i class="fa-solid fa-phone absolute left-3.5 top-3.5 text-gray-500 text-sm"></i>
+<input type="tel" id="login-phone" required placeholder="9XX XXX XXX" class="w-full bg-dark-input border border-dark-border rounded-xl pl-10 pr-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">SENHA</label>
+<div class="relative">
+<i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-gray-500 text-sm"></i>
+<input type="password" id="login-password" required placeholder="••••••••" class="w-full bg-dark-input border border-dark-border rounded-xl pl-10 pr-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+</div>
+<button type="submit" class="w-full gold-gradient text-black font-bold py-3.5 rounded-xl text-sm hover:opacity-90 transition shadow-lg flex items-center justify-center space-x-2">
+<span>ENTRAR NA CONTA</span>
+<i class="fa-solid fa-arrow-right"></i>
+</button>
+<div class="text-center">
+<button type="button" onclick="toggleAuthForm('signup')" class="text-xs text-amber-500 hover:underline">Ainda não tem conta? Cadastre-se</button>
+</div>
+</form>
+<!-- Signup Form (Hidden by default) -->
+<form id="signup-form" onsubmit="handleSignup(event)" class="space-y-4 hidden">
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">NOME COMPLETO</label>
+<div class="relative">
+<i class="fa-solid fa-user absolute left-3.5 top-3.5 text-gray-500 text-sm"></i>
+<input type="text" id="signup-name" required placeholder="Seu Nome" class="w-full bg-dark-input border border-dark-border rounded-xl pl-10 pr-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">NÚMERO DE TELEFONE</label>
+<div class="relative">
+<i class="fa-solid fa-phone absolute left-3.5 top-3.5 text-gray-500 text-sm"></i>
+<input type="tel" id="signup-phone" required placeholder="9XX XXX XXX" class="w-full bg-dark-input border border-dark-border rounded-xl pl-10 pr-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">CRIAR SENHA</label>
+<div class="relative">
+<i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-gray-500 text-sm"></i>
+<input type="password" id="signup-password" required placeholder="••••••••" class="w-full bg-dark-input border border-dark-border rounded-xl pl-10 pr-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+</div>
+<button type="submit" class="w-full gold-gradient text-black font-bold py-3.5 rounded-xl text-sm hover:opacity-90 transition shadow-lg flex items-center justify-center space-x-2">
+<span>CRIAR CONTA AGORA</span>
+<i class="fa-solid fa-user-plus"></i>
+</button>
+<div class="text-center">
+<button type="button" onclick="toggleAuthForm('login')" class="text-xs text-amber-500 hover:underline">Já tem uma conta? Efetuar Login</button>
+</div>
+</form>
+</div>
+</div>
+<!-- MAIN APP WRAPPER (HIDDEN UNTIL AUTHENTICATED) -->
+<div id="app-wrapper" class="hidden min-h-screen flex flex-col">
+<!-- HEADER -->
+<header class="sticky top-0 z-30 bg-dark-card/90 backdrop-blur-md border-b border-dark-border px-4 py-3">
+<div class="max-w-4xl mx-auto flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<div class="w-10 h-10 gold-gradient rounded-xl flex items-center justify-center text-black font-extrabold text-lg shadow-md">
+AZ
+</div>
+<div>
+<span id="user-display-name" class="font-bold text-sm text-gray-100 block">Carregando...</span>
+<span id="user-approved-badge" class="text-[10px] bg-red-900/60 text-red-300 px-2 py-0.5 rounded-full font-semibold border border-red-700/50">
+Sem Depósito Aprovado
+</span>
+</div>
+</div>
+<div class="flex items-center space-x-2">
+<button onclick="openAdminModal()" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5">
+<i class="fa-solid fa-shield-halved"></i>
+<span class="hidden sm:inline">ADM</span>
+</button>
+<button onclick="handleLogout()" class="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-semibold transition">
+<i class="fa-solid fa-right-from-bracket"></i>
+</button>
+</div>
+</div>
+</header>
+<!-- CONTENT CONTAINERS -->
+<main class="max-w-4xl w-full mx-auto p-4 flex-1 space-y-6">
+<!-- BALANCE & ACTIONS CARD -->
+<section class="bg-gradient-to-r from-dark-card via-amber-950/20 to-dark-card border border-dark-border rounded-2xl p-6 relative overflow-hidden card-glow">
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+<div class="space-y-1">
+<span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Saldo Disponível</span>
+<div class="text-3xl sm:text-4xl font-extrabold gold-gradient-text" id="user-balance-display">
+0,00 Kz
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3 mt-6">
+<button onclick="switchTab('deposit')" class="gold-gradient text-black font-bold py-3 rounded-xl text-xs sm:text-sm hover:opacity-90 transition shadow-md flex items-center justify-center space-x-2">
+<i class="fa-solid fa-arrow-down-left"></i>
+<span>DEPOSITAR</span>
+</button>
+<button onclick="switchTab('withdraw')" class="bg-dark-input hover:bg-dark-border border border-dark-border text-amber-400 font-bold py-3 rounded-xl text-xs sm:text-sm transition flex items-center justify-center space-x-2">
+<i class="fa-solid fa-arrow-up-right"></i>
+<span>LEVANTAR</span>
+</button>
+</div>
+</section>
+<!-- NAVIGATION TABS -->
+<div class="flex border-b border-dark-border space-x-2 overflow-x-auto custom-scrollbar pb-1">
+<button id="tab-btn-vips" onclick="switchTab('vips')" class="px-4 py-2 text-xs font-bold rounded-lg border-b-2 border-amber-500 text-amber-400 whitespace-nowrap">
+<i class="fa-solid fa-crown mr-1"></i> Pacotes VIP (15)
+</button>
+<button id="tab-btn-tasks" onclick="switchTab('tasks')" class="px-4 py-2 text-xs font-bold rounded-lg border-b-2 border-transparent text-gray-400 hover:text-gray-200 whitespace-nowrap">
+<i class="fa-solid fa-list-check mr-1"></i> Tarefas Diárias
+</button>
+<button id="tab-btn-deposit" onclick="switchTab('deposit')" class="px-4 py-2 text-xs font-bold rounded-lg border-b-2 border-transparent text-gray-400 hover:text-gray-200 whitespace-nowrap">
+<i class="fa-solid fa-wallet mr-1"></i> Depósito
+</button>
+<button id="tab-btn-withdraw" onclick="switchTab('withdraw')" class="px-4 py-2 text-xs font-bold rounded-lg border-b-2 border-transparent text-gray-400 hover:text-gray-200 whitespace-nowrap">
+<i class="fa-solid fa-money-bill-transfer mr-1"></i> Levantamento
+</button>
+<button id="tab-btn-history" onclick="switchTab('history')" class="px-4 py-2 text-xs font-bold rounded-lg border-b-2 border-transparent text-gray-400 hover:text-gray-200 whitespace-nowrap">
+<i class="fa-solid fa-clock-rotate-left mr-1"></i> Histórico
+</button>
+</div>
+<!-- TESTIMONIALS MARQUEE / PROVA SOCIAL DE GANHOS -->
+<div class="bg-dark-card/60 border border-dark-border/60 rounded-xl p-2.5 overflow-hidden relative">
+<div class="flex items-center space-x-2 text-xs font-bold text-amber-400 mb-1.5 px-1">
+<i class="fa-solid fa-circle-check text-emerald-400 animate-pulse"></i>
+<span>Últimos Levantamentos Efetuados em Tempo Real</span>
+</div>
+<div class="w-full overflow-hidden whitespace-nowrap py-1">
+<div class="animate-marquee space-x-6 text-xs text-gray-300">
+<span class="inline-flex items-center space-x-1.5 bg-dark-input px-3 py-1 rounded-full border border-dark-border">
+<i class="fa-solid fa-user-circle text-amber-400"></i>
+<span class="font-bold text-white">Mateus S.</span>
+<span class="text-emerald-400">+18.500 Kz</span>
+<span class="text-[10px] text-gray-500">Há 3 min</span>
+</span>
+<span class="inline-flex items-center space-x-1.5 bg-dark-input px-3 py-1 rounded-full border border-dark-border">
+<i class="fa-solid fa-user-circle text-amber-400"></i>
+<span class="font-bold text-white">Laurindo M.</span>
+<span class="text-emerald-400">+50.000 Kz</span>
+<span class="text-[10px] text-gray-500">Há 7 min</span>
+</span>
+<span class="inline-flex items-center space-x-1.5 bg-dark-input px-3 py-1 rounded-full border border-dark-border">
+<i class="fa-solid fa-user-circle text-amber-400"></i>
+<span class="font-bold text-white">Cláudia F.</span>
+<span class="text-emerald-400">+7.500 Kz</span>
+<span class="text-[10px] text-gray-500">Há 12 min</span>
+</span>
+<span class="inline-flex items-center space-x-1.5 bg-dark-input px-3 py-1 rounded-full border border-dark-border">
+<i class="fa-solid fa-user-circle text-amber-400"></i>
+<span class="font-bold text-white">António D.</span>
+<span class="text-emerald-400">+125.000 Kz</span>
+<span class="text-[10px] text-gray-500">Há 15 min</span>
+</span>
+</div>
+</div>
+</div>
+<!-- TAB 1: 15 VIP PACKAGES -->
+<section id="tab-content-vips" class="space-y-4">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="text-lg font-bold text-gray-100">Planos de Investimento VIP</h2>
+<p class="text-xs text-gray-400">Rentabilidade diária garantida com ativação imediata</p>
+</div>
+</div>
+<div id="vips-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<!-- Dynamic rendering of 15 VIPs -->
+</div>
+</section>
+<!-- TAB 2: TAREFAS DIÁRIAS -->
+<section id="tab-content-tasks" class="space-y-4 hidden">
+<div>
+<h2 class="text-lg font-bold text-gray-100">Tarefas Diárias & Recompensas</h2>
+<p class="text-xs text-gray-400">Cumpra os objetivos e ganhe bónus diretamente no seu saldo</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Task 1 -->
+<div class="bg-dark-card border border-dark-border rounded-2xl p-4 space-y-3 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex justify-between items-center">
+<span class="text-xs font-bold text-amber-400 flex items-center space-x-1.5">
+<i class="fa-brands fa-whatsapp text-lg text-emerald-400"></i>
+<span>CONVITE OBRIGATÓRIO DE GRUPO</span>
+</span>
+<span class="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">+1.500 Kz</span>
+</div>
+<h3 class="text-sm font-bold text-white">Convidar 20 pessoas para o Grupo do WhatsApp</h3>
+<p class="text-xs text-gray-400">Adicione ou partilhe o link do grupo com pelo menos 20 membros ativos para receber o bónus.</p>
+</div>
+<button onclick="claimTaskReward('task_whatsapp_20', 1500)" class="w-full gold-gradient text-black font-bold py-2.5 rounded-xl text-xs hover:opacity-90 transition">
+CONCLUIR & CONVIDAR
+</button>
+</div>
+<!-- Task 2 -->
+<div class="bg-dark-card border border-dark-border rounded-2xl p-4 space-y-3 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex justify-between items-center">
+<span class="text-xs font-bold text-amber-400 flex items-center space-x-1.5">
+<i class="fa-solid fa-calendar-check text-amber-400"></i>
+<span>CHECK-IN DIÁRIO</span>
+</span>
+<span class="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">+500 Kz</span>
+</div>
+<h3 class="text-sm font-bold text-white">Recompensa de Presença Diária</h3>
+<p class="text-xs text-gray-400">Inicie sessão todos os dias para resgatar a sua recompensa diária de permanência.</p>
+</div>
+<button onclick="claimTaskReward('task_daily_checkin', 500)" class="w-full bg-dark-input hover:bg-dark-border border border-amber-500/30 text-amber-400 font-bold py-2.5 rounded-xl text-xs transition">
+RESGATAR CHECK-IN
+</button>
+</div>
+</div>
+</section>
+<!-- TAB 3: DEPOSIT FORM & BANK COORDS -->
+<section id="tab-content-deposit" class="space-y-4 hidden">
+<div class="bg-dark-card border border-dark-border rounded-2xl p-5 space-y-4">
+<div>
+<h2 class="text-lg font-bold text-gray-100">Coordenadas para Depósito</h2>
+<p class="text-xs text-gray-400">Transfira para os dados abaixo e envie o comprovativo</p>
+</div>
+<div class="bg-dark-input rounded-xl p-4 space-y-3 text-xs border border-dark-border">
+<div class="flex justify-between items-center">
+<span class="text-gray-400">Titular:</span>
+<strong id="coord-holder" class="text-white">...</strong>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-gray-400">IBAN:</span>
+<div class="flex items-center space-x-2">
+<strong id="coord-iban" class="text-amber-400 font-mono">...</strong>
+<button onclick="copyToClipboard('coord-iban')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-copy"></i></button>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-gray-400">Telefone / Express:</span>
+<strong id="coord-phone" class="text-white">...</strong>
+</div>
+</div>
+<form id="deposit-form" onsubmit="handleDepositSubmit(event)" class="space-y-4 pt-2">
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">VALOR DEPOSITADO (Kz)</label>
+<input type="number" id="deposit-amount" required placeholder="Ex: 15000" class="w-full bg-dark-input border border-dark-border rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">NOME DO REMETENTE</label>
+<input type="text" id="deposit-sender" required placeholder="Seu nome na conta bancária" class="w-full bg-dark-input border border-dark-border rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">REFERÊNCIA / NÚMERO DA TRANSFERÊNCIA</label>
+<input type="text" id="deposit-ref" required placeholder="Ex: TX987654321" class="w-full bg-dark-input border border-dark-border rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+<button type="submit" class="w-full gold-gradient text-black font-bold py-3.5 rounded-xl text-sm hover:opacity-90 transition shadow-lg">
+ENVIAR COMPROVATIVO DE DEPÓSITO
+</button>
+</form>
+</div>
+</section>
+<!-- TAB 4: WITHDRAWAL FORM -->
+<section id="tab-content-withdraw" class="space-y-4 hidden">
+<div class="bg-dark-card border border-dark-border rounded-2xl p-5 space-y-4">
+<div>
+<h2 class="text-lg font-bold text-gray-100">Solicitar Levantamento</h2>
+<p class="text-xs text-gray-400">O saldo será enviado para a sua conta bancária</p>
+</div>
+<div id="withdraw-restriction-warning" class="bg-red-950/40 border border-red-500/40 rounded-xl p-3 text-xs text-red-300 flex items-center space-x-2">
+<i class="fa-solid fa-triangle-exclamation text-red-400 text-base"></i>
+<span><strong>Atenção:</strong> Precisa de ter pelo menos 1 depósito APROVADO pelo ADM para desbloquear os levantamentos.</span>
+</div>
+<form id="withdraw-form" onsubmit="handleWithdrawSubmit(event)" class="space-y-4">
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">VALOR A LEVANTAR (Kz)</label>
+<input type="number" id="withdraw-amount" required placeholder="Ex: 10000" class="w-full bg-dark-input border border-dark-border rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">NOME DO TITULAR DA CONTA</label>
+<input type="text" id="withdraw-holder" required placeholder="Nome completo" class="w-full bg-dark-input border border-dark-border rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-400 mb-1">IBAN DE DESTINO</label>
+<input type="text" id="withdraw-iban" required placeholder="AO06.0000.0000.0000.0000.0" class="w-full bg-dark-input border border-dark-border rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition">
+</div>
+<button type="submit" class="w-full gold-gradient text-black font-bold py-3.5 rounded-xl text-sm hover:opacity-90 transition shadow-lg">
+SOLICITAR LEVANTAMENTO
+</button>
+</form>
+</div>
+</section>
+<!-- TAB 5: HISTORY -->
+<section id="tab-content-history" class="space-y-4 hidden">
+<h2 class="text-lg font-bold text-gray-100">Histórico de Atividades</h2>
+<div class="bg-dark-card border border-dark-border rounded-2xl p-4 space-y-3">
+<h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Depósitos</h3>
+<div id="user-deposits-list" class="space-y-2">
+<!-- Dynamic rendering -->
+</div>
+</div>
+<div class="bg-dark-card border border-dark-border rounded-2xl p-4 space-y-3">
+<h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Levantamentos</h3>
+<div id="user-withdrawals-list" class="space-y-2">
+<!-- Dynamic rendering -->
+</div>
+</div>
+</section>
+</main>
+<!-- FOOTER & WHATSAPP SUPPORT -->
+<footer class="bg-dark-card border-t border-dark-border p-4 mt-auto">
+<div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+<div>
+<p class="text-xs font-semibold text-gray-300">MONEY AZ Platform © 2026</p>
+<p class="text-[10px] text-gray-500">Todos os direitos reservados.</p>
+</div>
+<a id="whatsapp-link-btn" href="#" target="_blank" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2">
+<i class="fa-brands fa-whatsapp text-lg"></i>
+<span>GRUPO OFICIAL WHATSAPP</span>
+</a>
+</div>
+</footer>
+</div>
+<!-- ADMIN PANEL MODAL (PIN 334476) -->
+<div id="admin-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 hidden">
+<div class="w-full max-w-3xl bg-dark-card border border-amber-500/30 rounded-2xl p-5 sm:p-6 shadow-2xl max-h-[90vh] flex flex-col space-y-4">
+<div class="flex justify-between items-center border-b border-dark-border pb-3">
+<div class="flex items-center space-x-2">
+<i class="fa-solid fa-shield-halved text-amber-500 text-xl"></i>
+<h2 class="text-lg font-bold gold-gradient-text">PAINEL ADMINISTRATIVO</h2>
+</div>
+<button onclick="closeAdminModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+<!-- PIN ENTRY SCREEN -->
+<div id="admin-pin-container" class="space-y-4 py-6 text-center max-w-xs mx-auto">
+<p class="text-xs text-gray-400">Insira o PIN do Administrador para aceder aos controlos</p>
+<input type="password" id="admin-pin-input" maxlength="6" placeholder="PIN de Acesso" class="w-full bg-dark-input border border-dark-border rounded-xl px-4 py-3 text-center text-lg tracking-widest font-bold focus:border-amber-500 focus:outline-none">
+<button onclick="verifyAdminPIN()" class="w-full gold-gradient text-black font-bold py-3 rounded-xl text-xs shadow-md">DESBLOQUEAR PAINEL</button>
+</div>
+<!-- ADMIN CONTROLS SCREEN -->
+<div id="admin-controls-container" class="space-y-6 overflow-y-auto custom-scrollbar pr-1 hidden flex-1">
+<!-- SUB-TABS ADMIN -->
+<div class="flex space-x-2 border-b border-dark-border pb-2 overflow-x-auto custom-scrollbar">
+<button onclick="switchAdminSubTab('users')" id="adm-tab-users" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-black">Utilizadores</button>
+<button onclick="switchAdminSubTab('deposits')" id="adm-tab-deposits" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-dark-input text-gray-400">Depósitos</button>
+<button onclick="switchAdminSubTab('withdrawals')" id="adm-tab-withdrawals" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-dark-input text-gray-400">Levantamentos</button>
+<button onclick="switchAdminSubTab('vips')" id="adm-tab-vips" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-dark-input text-gray-400">Editar 15 VIPs</button>
+<button onclick="switchAdminSubTab('settings')" id="adm-tab-settings" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-dark-input text-gray-400">Definições</button>
+</div>
+<!-- SUB TAB 1: USERS LIVE LIST -->
+<div id="adm-subtab-users" class="space-y-4">
+<div class="flex justify-between items-center">
+<h3 class="text-xs font-bold text-gray-400 uppercase">Utilizadores Registados em Tempo Real</h3>
+<input type="text" id="admin-user-search" oninput="renderAdminUsers()" placeholder="Pesquisar utilizador..." class="bg-dark-input border border-dark-border rounded-lg px-3 py-1.5 text-xs focus:outline-none">
+</div>
+<div id="admin-users-list" class="space-y-2">
+<!-- Dynamic Rendering -->
+</div>
+</div>
+<!-- SUB TAB 2: PENDING DEPOSITS -->
+<div id="adm-subtab-deposits" class="space-y-3 hidden">
+<h3 class="text-xs font-bold text-gray-400 uppercase">Pedidos de Depósito</h3>
+<div id="admin-deposits-list" class="space-y-2">
+<!-- Dynamic Rendering -->
+</div>
+</div>
+<!-- SUB TAB 3: PENDING WITHDRAWALS -->
+<div id="adm-subtab-withdrawals" class="space-y-3 hidden">
+<h3 class="text-xs font-bold text-gray-400 uppercase">Pedidos de Levantamento</h3>
+<div id="admin-withdrawals-list" class="space-y-2">
+<!-- Dynamic Rendering -->
+</div>
+</div>
+<!-- SUB TAB 4: EDIT 15 VIPS -->
+<div id="adm-subtab-vips" class="space-y-3 hidden">
+<h3 class="text-xs font-bold text-gray-400 uppercase">Editar Valores dos 15 Pacotes VIP</h3>
+<div id="admin-vips-editor" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+<!-- Dynamic Editors -->
+</div>
+</div>
+<!-- SUB TAB 5: SYSTEM SETTINGS -->
+<div id="adm-subtab-settings" class="space-y-4 hidden">
+<h3 class="text-xs font-bold text-gray-400 uppercase">Coordenadas e Suporte</h3>
+<form onsubmit="handleSaveSettings(event)" class="space-y-3 text-xs">
+<div>
+<label class="block text-gray-400 mb-1">Titular da Conta</label>
+<input type="text" id="admin-coord-holder" class="w-full bg-dark-input border border-dark-border rounded-lg p-2.5">
+</div>
+<div>
+<label class="block text-gray-400 mb-1">IBAN de Recebimento</label>
+<input type="text" id="admin-coord-iban" class="w-full bg-dark-input border border-dark-border rounded-lg p-2.5">
+</div>
+<div>
+<label class="block text-gray-400 mb-1">Telefone Express / Suporte</label>
+<input type="text" id="admin-coord-phone" class="w-full bg-dark-input border border-dark-border rounded-lg p-2.5">
+</div>
+<div>
+<label class="block text-gray-400 mb-1">Link do Grupo do WhatsApp</label>
+<input type="url" id="admin-whatsapp-link" class="w-full bg-dark-input border border-dark-border rounded-lg p-2.5">
+</div>
+<button type="submit" class="w-full gold-gradient text-black font-bold py-2.5 rounded-lg">GUARDAR DEFINIÇÕES</button>
+</form>
+</div>
+</div>
+</div>
+</div>
+<!-- SCRIPT LOGIC -->
+<script>
+// INITIAL 15 VIP PACKAGES (7.500 Kz to 285.000 Kz)
+const initialVips = [
+{ id: 1, name: "VIP 1", price: 7500, dailyReturn: 1200 },
+{ id: 2, name: "VIP 2", price: 15000, dailyReturn: 2500 },
+{ id: 3, name: "VIP 3", price: 25000, dailyReturn: 4200 },
+{ id: 4, name: "VIP 4", price: 35000, dailyReturn: 6000 },
+{ id: 5, name: "VIP 5", price: 50000, dailyReturn: 8800 },
+{ id: 6, name: "VIP 6", price: 65000, dailyReturn: 11500 },
+{ id: 7, name: "VIP 7", price: 80000, dailyReturn: 14500 },
+{ id: 8, name: "VIP 8", price: 100000, dailyReturn: 18500 },
+{ id: 9, name: "VIP 9", price: 125000, dailyReturn: 23500 },
+{ id: 10, name: "VIP 10", price: 150000, dailyReturn: 28800 },
+{ id: 11, name: "VIP 11", price: 175000, dailyReturn: 34200 },
+{ id: 12, name: "VIP 12", price: 200000, dailyReturn: 39500 },
+{ id: 13, name: "VIP 13", price: 225000, dailyReturn: 45000 },
+{ id: 14, name: "VIP 14", price: 250000, dailyReturn: 51000 },
+{ id: 15, name: "VIP 15", price: 285000, dailyReturn: 60000 }
+];
+// GLOBAL APP STATE
+let state = {
+currentUser: null,
+users: [],
+isAdminUnlocked: false,
+settings: {
+holder: 'MONEY AZ INVESTIMENTOS LDA',
+phone: '+244 923 000 000',
+iban: 'AO06.0055.0000.9988.7766.1011.2',
+whatsapp: 'https://chat.whatsapp.com/AZMoneyGroupOfficial'
+},
+deposits: [],
+withdrawals: [],
+vipPackages: initialVips
+};
+window.state = state;
+// SYNC HELPER (FIRESTORE + LOCAL STORAGE FALLBACK)
+async function syncData(collectionType, docId, data) {
+if (window.FirebaseDB) {
+try {
+const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'money-az-default';
+if (collectionType === 'user') {
+await setDoc(doc(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'users', docId), data);
+} else if (collectionType === 'deposit') {
+await setDoc(doc(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'deposits', docId), data);
+} else if (collectionType === 'withdrawal') {
+await setDoc(doc(window.FirebaseDB, 'artifacts', appId, 'public', 'data', 'withdrawals', docId), data);
+} else if (collectionType === 'settings') {
+await setDoc(window.FS_SETTINGS_DOC, data);
+} else if (collectionType === 'vips') {
+await setDoc(window.FS_VIPS_DOC, { packages: data });
+}
+} catch (e) {
+console.error("Firestore Sync Error:", e);
+}
+}
+saveLocalState();
+}
+// INITIALIZATION
+window.addEventListener('DOMContentLoaded', () => {
+loadLocalState();
+checkAuth();
+renderVIPPackages();
+renderAdminVIPEditors();
+});
+function loadLocalState() {
+const saved = localStorage.getItem('money_az_v3_state');
+if (saved) {
+try {
+const parsed = JSON.parse(saved);
+state.currentUser = parsed.currentUser || null;
+state.users = parsed.users || [];
+state.settings = parsed.settings || state.settings;
+state.deposits = parsed.deposits || [];
+state.withdrawals = parsed.withdrawals || [];
+if (parsed.vipPackages && parsed.vipPackages.length === 15) {
+state.vipPackages = parsed.vipPackages;
+}
+} catch (e) {
+console.error("Error loading local state:", e);
+}
+}
+}
+function saveLocalState() {
+localStorage.setItem('money_az_v3_state', JSON.stringify(state));
+updateUI();
+}
+function checkAuth() {
+const authScreen = document.getElementById('auth-screen');
+const appWrapper = document.getElementById('app-wrapper');
+if (state.currentUser) {
+authScreen.classList.add('hidden');
+appWrapper.classList.remove('hidden');
+updateUI();
+} else {
+authScreen.classList.remove('hidden');
+appWrapper.classList.add('hidden');
+}
+}
+function toggleAuthForm(type) {
+if (type === 'signup') {
+document.getElementById('login-form').classList.add('hidden');
+document.getElementById('signup-form').classList.remove('hidden');
+} else {
+document.getElementById('signup-form').classList.add('hidden');
+document.getElementById('login-form').classList.remove('hidden');
+}
+}
+function cleanPhone(phone) {
+return (phone || '').replace(/\D/g, '');
+}
+async function handleSignup(e) {
+e.preventDefault();
+const name = document.getElementById('signup-name').value.trim();
+const rawPhone = document.getElementById('signup-phone').value.trim();
+const phone = cleanPhone(rawPhone);
+const password = document.getElementById('signup-password').value.trim();
+if (state.users.some(u => cleanPhone(u.phone) === phone)) {
+showToast('Este número de telefone já está registado.', 'error');
+toggleAuthForm('login');
+return;
+}
+const newUser = {
+id: 'usr_' + Date.now(),
+name: name,
+phone: rawPhone,
+password: password,
+balance: 0,
+hasApprovedDeposit: false,
+createdAt: new Date().toLocaleDateString('pt-AO')
+};
+state.users.push(newUser);
+state.currentUser = newUser;
+await syncData('user', newUser.id, newUser);
+checkAuth();
+showToast(⁠Conta criada com sucesso! Bem-vindo, ${name}.⁠, 'success');
+}
+function handleLogin(e) {
+e.preventDefault();
+const rawPhone = document.getElementById('login-phone').value.trim();
+const phone = cleanPhone(rawPhone);
+const password = document.getElementById('login-password').value.trim();
+const user = state.users.find(u => cleanPhone(u.phone) === phone && u.password === password);
+if (!user) {
+showToast('Telefone ou senha incorretos!', 'error');
+return;
+}
+state.currentUser = user;
+saveLocalState();
+checkAuth();
+showToast(⁠Bem-vindo de volta, ${user.name}!⁠, 'success');
+}
+function handleLogout() {
+state.currentUser = null;
+saveLocalState();
+checkAuth();
+showToast('Sessão encerrada com sucesso.', 'info');
+}
+function updateUI() {
+if (!state.currentUser) return;
+document.getElementById('user-display-name').innerText = state.currentUser.name;
+document.getElementById('user-balance-display').innerText = formatKz(state.currentUser.balance);
+const badge = document.getElementById('user-approved-badge');
+if (state.currentUser.hasApprovedDeposit) {
+badge.innerText = 'Depósito Aprovado (Levantamento Libertado)';
+badge.className = 'text-[10px] bg-emerald-900/60 text-emerald-300 px-2 py-0.5 rounded-full font-semibold border border-emerald-700/50';
+document.getElementById('withdraw-restriction-warning').classList.add('hidden');
+} else {
+badge.innerText = 'Sem Depósito Aprovado (Levantamento Bloqueado)';
+badge.className = 'text-[10px] bg-red-900/60 text-red-300 px-2 py-0.5 rounded-full font-semibold border border-red-700/50';
+document.getElementById('withdraw-restriction-warning').classList.remove('hidden');
+}
+document.getElementById('coord-holder').innerText = state.settings.holder;
+document.getElementById('coord-iban').innerText = state.settings.iban;
+document.getElementById('coord-phone').innerText = state.settings.phone;
+document.getElementById('whatsapp-link-btn').href = state.settings.whatsapp;
+renderUserHistory();
+if (state.isAdminUnlocked) {
+renderAdminUsers();
+renderAdminDeposits();
+renderAdminWithdrawals();
+}
+}
+function switchTab(tabName) {
+const tabs = ['vips', 'tasks', 'deposit', 'withdraw', 'history'];
+tabs.forEach(t => {
+const el = document.getElementById(⁠tab-content-${t}⁠);
+if (el) el.classList.add('hidden');
+const btn = document.getElementById(⁠tab-btn-${t}⁠);
+if (btn) btn.className = "px-4 py-2 text-xs font-bold rounded-lg border-b-2 border-transparent text-gray-400 hover:text-gray-200 whitespace-nowrap";
+});
+const targetTab = document.getElementById(⁠tab-content-${tabName}⁠);
+if (targetTab) targetTab.classList.remove('hidden');
+const activeBtn = document.getElementById(⁠tab-btn-${tabName}⁠);
+if (activeBtn) activeBtn.className = "px-4 py-2 text-xs font-bold rounded-lg border-b-2 border-amber-500 text-amber-400 whitespace-nowrap";
+}
+async function claimTaskReward(taskId, rewardAmount) {
+if (!state.currentUser) return;
+if (!state.currentUser.completedTasks) state.currentUser.completedTasks = {};
+if (state.currentUser.completedTasks[taskId]) {
+showToast('Esta tarefa já foi concluída por si hoje!', 'error');
+return;
+}
+if (taskId === 'task_whatsapp_20') {
+window.open(state.settings.whatsapp, '_blank');
+}
+state.currentUser.completedTasks[taskId] = true;
+state.currentUser.balance += rewardAmount;
+await syncData('user', state.currentUser.id, state.currentUser);
+showToast(⁠Recompensa de ${formatKz(rewardAmount)} creditada no seu saldo!⁠, 'success');
+}
+function renderVIPPackages() {
+const container = document.getElementById('vips-grid');
+container.innerHTML = state.vipPackages.map(pkg => `
+<div class="bg-dark-card border border-dark-border hover:border-amber-500/50 transition-all rounded-2xl p-5 space-y-4 flex flex-col justify-between relative overflow-hidden group">
+<div class="space-y-2">
+<div class="flex justify-between items-center">
+<span class="text-xs font-extrabold gold-gradient-text tracking-wider uppercase">{pkg.name}</span>
+<span class="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">Ativação Imediata</span>
+</div>
+<div class="text-2xl font-black text-white">{formatKz(pkg.price)}</div>
+</div>
+<div class="bg-dark-input/60 rounded-xl p-3 space-y-1.5 text-xs">
+<div class="flex justify-between text-gray-400">
+<span>Rendimento Diário:</span>
+<strong class="text-emerald-400">+${formatKz(pkg.dailyReturn)}</strong>
+</div>
+<div class="flex justify-between text-gray-400">
+<span>Ciclo de Retorno:</span>
+<strong class="text-gray-200">Diário</strong>
+</div>
+</div>
+<button onclick="investVIP(${pkg.id})" class="w-full bg-dark-input group-hover:gold-gradient text-amber-400 group-hover:text-black font-bold py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center justify-center space-x-1">
+<span>INVESTIR AGORA</span>
+<i class="fa-solid fa-arrow-right"></i>
+</button>
+</div>
+`).join('');
+}
+async function investVIP(pkgId) {
+const pkg = state.vipPackages.find(p => p.id === pkgId);
+if (!pkg) return;
+if (state.currentUser.balance < pkg.price) {
+showToast(⁠Saldo insuficiente (${formatKz(state.currentUser.balance)}). Faça um depósito!⁠, 'error');
+switchTab('deposit');
+return;
+}
+state.currentUser.balance -= pkg.price;
+await syncData('user', state.currentUser.id, state.currentUser);
+showToast(⁠Plano ${pkg.name} ativado com sucesso!⁠, 'success');
+}
+async function handleDepositSubmit(e) {
+e.preventDefault();
+const amount = parseFloat(document.getElementById('deposit-amount').value);
+const sender = document.getElementById('deposit-sender').value;
+const ref = document.getElementById('deposit-ref').value;
+if (!amount || amount < 500) {
+showToast('Valor mínimo de depósito é 500 Kz', 'error');
+return;
+}
+const newDeposit = {
+id: 'dep_' + Date.now(),
+userId: state.currentUser.id,
+userName: state.currentUser.name,
+userPhone: state.currentUser.phone,
+amount: amount,
+sender: sender,
+ref: ref,
+status: 'PENDENTE',
+timestamp: Date.now(),
+date: new Date().toLocaleDateString('pt-AO')
+};
+state.deposits.unshift(newDeposit);
+await syncData('deposit', newDeposit.id, newDeposit);
+document.getElementById('deposit-form').reset();
+showToast('Comprovativo submetido! Aguarde a aprovação do ADM.', 'success');
+switchTab('history');
+}
+async function handleWithdrawSubmit(e) {
+e.preventDefault();
+if (!state.currentUser.hasApprovedDeposit) {
+showToast('ERRO: É necessário ter pelo menos 1 depósito APROVADO para efetuar levantamentos!', 'error');
+return;
+}
+const amount = parseFloat(document.getElementById('withdraw-amount').value);
+const holder = document.getElementById('withdraw-holder').value;
+const iban = document.getElementById('withdraw-iban').value;
+if (amount > state.currentUser.balance) {
+showToast('Saldo insuficiente para realizar este levantamento.', 'error');
+return;
+}
+state.currentUser.balance -= amount;
+await syncData('user', state.currentUser.id, state.currentUser);
+const newWithdrawal = {
+id: 'wit_' + Date.now(),
+userId: state.currentUser.id,
+userName: state.currentUser.name,
+userPhone: state.currentUser.phone,
+amount: amount,
+holder: holder,
+iban: iban,
+status: 'PENDENTE',
+timestamp: Date.now(),
+date: new Date().toLocaleDateString('pt-AO')
+};
+state.withdrawals.unshift(newWithdrawal);
+await syncData('withdrawal', newWithdrawal.id, newWithdrawal);
+document.getElementById('withdraw-form').reset();
+showToast('Solicitação de levantamento enviada com sucesso!', 'success');
+switchTab('history');
+}
+function renderUserHistory() {
+const myDeps = state.deposits.filter(d => d.userId === state.currentUser.id);
+const myWits = state.withdrawals.filter(w => w.userId === state.currentUser.id);
+const depContainer = document.getElementById('user-deposits-list');
+if (myDeps.length === 0) {
+depContainer.innerHTML = ⁠<p class="text-xs text-gray-500">Nenhum depósito registado.</p>⁠;
+} else {
+depContainer.innerHTML = myDeps.map(d => ⁠<div class="bg-dark-input border border-dark-border rounded-xl p-3 flex justify-between items-center text-xs"> <div> <div class="font-bold text-gray-200">${formatKz(d.amount)}</div> <div class="text-[10px] text-gray-500">${d.date} • Ref: ${d.ref}</div> </div> <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${ d.status === 'APROVADO' ? 'bg-emerald-900/60 text-emerald-300' : d.status === 'REJEITADO' ? 'bg-red-900/60 text-red-300' : 'bg-amber-900/60 text-amber-300' }">${d.status}</span> </div>⁠).join('');
+}
+const witContainer = document.getElementById('user-withdrawals-list');
+if (myWits.length === 0) {
+witContainer.innerHTML = ⁠<p class="text-xs text-gray-500">Nenhum levantamento registado.</p>⁠;
+} else {
+witContainer.innerHTML = myWits.map(w => ⁠<div class="bg-dark-input border border-dark-border rounded-xl p-3 flex justify-between items-center text-xs"> <div> <div class="font-bold text-gray-200">${formatKz(w.amount)}</div> <div class="text-[10px] text-gray-500">${w.date} • IBAN: ${w.iban.substring(0, 10)}...</div> </div> <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${ w.status === 'APROVADO' ? 'bg-emerald-900/60 text-emerald-300' : w.status === 'REJEITADO' ? 'bg-red-900/60 text-red-300' : 'bg-amber-900/60 text-amber-300' }">${w.status}</span> </div>⁠).join('');
+}
+}
+// ADMIN PANEL FUNCTIONS
+function openAdminModal() {
+document.getElementById('admin-modal').classList.remove('hidden');
+}
+function closeAdminModal() {
+document.getElementById('admin-modal').classList.add('hidden');
+}
+function verifyAdminPIN() {
+const input = document.getElementById('admin-pin-input').value;
+if (input === '334476') {
+state.isAdminUnlocked = true;
+document.getElementById('admin-pin-container').classList.add('hidden');
+document.getElementById('admin-controls-container').classList.remove('hidden');
+document.getElementById('admin-coord-holder').value = state.settings.holder;
+document.getElementById('admin-coord-iban').value = state.settings.iban;
+document.getElementById('admin-coord-phone').value = state.settings.phone;
+document.getElementById('admin-whatsapp-link').value = state.settings.whatsapp;
+renderAdminUsers();
+renderAdminDeposits();
+renderAdminWithdrawals();
+renderAdminVIPEditors();
+showToast('Painel ADM Desbloqueado!', 'success');
+} else {
+showToast('PIN do Administrador Incorreto!', 'error');
+}
+}
+function switchAdminSubTab(tab) {
+const tabs = ['users', 'deposits', 'withdrawals', 'vips', 'settings'];
+tabs.forEach(t => {
+document.getElementById(⁠adm-subtab-${t}⁠).classList.add('hidden');
+document.getElementById(⁠adm-tab-${t}⁠).className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-dark-input text-gray-400";
+});
+document.getElementById(⁠adm-subtab-${tab}⁠).classList.remove('hidden');
+document.getElementById(⁠adm-tab-${tab}⁠).className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-black";
+}
+function renderAdminUsers() {
+const query = (document.getElementById('admin-user-search')?.value || '').toLowerCase();
+const container = document.getElementById('admin-users-list');
+const filtered = state.users.filter(u => u.name.toLowerCase().includes(query) || u.phone.includes(query));
+if (filtered.length === 0) {
+container.innerHTML = ⁠<p class="text-xs text-gray-500 py-2">Nenhum utilizador encontrado.</p>⁠;
+return;
+}
+container.innerHTML = filtered.map(u => `
+<div class="bg-dark-input border border-dark-border rounded-xl p-3 space-y-2 text-xs">
+<div class="flex justify-between items-start">
+<div>
+<strong class="text-gray-100 block">{u.name}</strong>
+<span class="text-[10px] text-gray-400">{u.phone} • Criado em: ${u.createdAt}</span>
+</div>
+<button onclick="adminToggleUserApproved('${u.id}')" class="px-2 py-1 rounded text-[10px] font-bold ${u.hasApprovedDeposit ? 'bg-emerald-900/60 text-emerald-300' : 'bg-red-900/60 text-red-300'}">
+${u.hasApprovedDeposit ? 'Levantamento Permitido' : 'Levantamento Bloqueado'}
+</button>
+</div>
+<div class="flex items-center space-x-2 pt-1">
+<span class="text-gray-400 text-[10px]">Editar Saldo:</span>
+<input type="number" id="admin-user-bal-${u.id}" value="${u.balance}" class="bg-dark-card border border-dark-border rounded px-2 py-1 text-xs w-28 text-amber-400 font-bold focus:outline-none">
+<button onclick="adminUpdateUserBalance('${u.id}')" class="bg-amber-500 hover:bg-amber-600 text-black px-2.5 py-1 rounded text-[10px] font-bold transition">
+Atualizar
+</button>
+</div>
+</div>
+`).join('');
+}
+async function adminUpdateUserBalance(userId) {
+const user = state.users.find(u => u.id === userId);
+if (!user) return;
+const val = parseFloat(document.getElementById(⁠admin-user-bal-${userId}⁠).value);
+if (isNaN(val)) return;
+user.balance = val;
+await syncData('user', user.id, user);
+showToast(⁠Saldo de ${user.name} atualizado para ${formatKz(val)}.⁠, 'success');
+}
+async function adminToggleUserApproved(userId) {
+const user = state.users.find(u => u.id === userId);
+if (!user) return;
+user.hasApprovedDeposit = !user.hasApprovedDeposit;
+await syncData('user', user.id, user);
+showToast(⁠Estado de levantamento de ${user.name} alterado.⁠, 'info');
+}
+function renderAdminDeposits() {
+const container = document.getElementById('admin-deposits-list');
+if (state.deposits.length === 0) {
+container.innerHTML = ⁠<p class="text-xs text-gray-500 py-2">Sem pedidos de depósito.</p>⁠;
+return;
+}
+container.innerHTML = state.deposits.map(d => `
+<div class="bg-dark-input border border-dark-border rounded-xl p-3 space-y-2 text-xs">
+<div class="flex justify-between items-start">
+<div>
+<strong class="text-amber-400 font-bold text-sm">{formatKz(d.amount)}</strong>
+<span class="block text-gray-200">{d.userName} (${d.userPhone})</span>
+<span class="text-[10px] text-gray-400">Remetente: ${d.sender} • Ref: {d.ref}</span>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold ${
+d.status === 'APROVADO' ? 'bg-emerald-900/60 text-emerald-300' :
+d.status === 'REJEITADO' ? 'bg-red-900/60 text-red-300' : 'bg-amber-900/60 text-amber-300'
+}">{d.status}</span>
+</div>
+${d.status === 'PENDENTE' ? ⁠<div class="flex space-x-2 pt-1"> <button onclick="approveDeposit('${d.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 rounded text-[10px] transition"> APROVAR (Ativa Levantamentos) </button> <button onclick="rejectDeposit('${d.id}')" class="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded text-[10px] transition"> REJEITAR </button> </div>⁠ : ''}
+</div>
+`).join('');
+}
+async function approveDeposit(depId) {
+const dep = state.deposits.find(d => d.id === depId);
+if (!dep) return;
+dep.status = 'APROVADO';
+await syncData('deposit', dep.id, dep);
+const targetUser = state.users.find(u => u.id === dep.userId);
+if (targetUser) {
+targetUser.balance += dep.amount;
+targetUser.hasApprovedDeposit = true;
+await syncData('user', targetUser.id, targetUser);
+}
+showToast(⁠Depósito de ${formatKz(dep.amount)} aprovado!⁠, 'success');
+}
+async function rejectDeposit(depId) {
+const dep = state.deposits.find(d => d.id === depId);
+if (!dep) return;
+dep.status = 'REJEITADO';
+await syncData('deposit', dep.id, dep);
+showToast('Depósito rejeitado.', 'info');
+}
+function renderAdminWithdrawals() {
+const container = document.getElementById('admin-withdrawals-list');
+if (state.withdrawals.length === 0) {
+container.innerHTML = ⁠<p class="text-xs text-gray-500 py-2">Sem pedidos de levantamento.</p>⁠;
+return;
+}
+container.innerHTML = state.withdrawals.map(w => `
+<div class="bg-dark-input border border-dark-border rounded-xl p-3 space-y-2 text-xs">
+<div class="flex justify-between items-start">
+<div>
+<strong class="text-red-400 font-bold text-sm">{formatKz(w.amount)}</strong>
+<span class="block text-gray-200">{w.userName} (${w.userPhone})</span>
+<span class="text-[10px] text-gray-400">Titular: ${w.holder} • IBAN: {w.iban}</span>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold ${
+w.status === 'APROVADO' ? 'bg-emerald-900/60 text-emerald-300' :
+w.status === 'REJEITADO' ? 'bg-red-900/60 text-red-300' : 'bg-amber-900/60 text-amber-300'
+}">{w.status}</span>
+</div>
+${w.status === 'PENDENTE' ? ⁠<div class="flex space-x-2 pt-1"> <button onclick="approveWithdrawal('${w.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 rounded text-[10px] transition"> CONFIRMAR PAGAMENTO </button> <button onclick="rejectWithdrawal('${w.id}')" class="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded text-[10px] transition"> REJEITAR & DEVOLVER </button> </div>⁠ : ''}
+</div>
+`).join('');
+}
+async function approveWithdrawal(wId) {
+const w = state.withdrawals.find(item => item.id === wId);
+if (!w) return;
+w.status = 'APROVADO';
+await syncData('withdrawal', w.id, w);
+showToast('Levantamento confirmado!', 'success');
+}
+async function rejectWithdrawal(wId) {
+const w = state.withdrawals.find(item => item.id === wId);
+if (!w) return;
+w.status = 'REJEITADO';
+await syncData('withdrawal', w.id, w);
+const targetUser = state.users.find(u => u.id === w.userId);
+if (targetUser) {
+targetUser.balance += w.amount;
+await syncData('user', targetUser.id, targetUser);
+}
+showToast('Levantamento rejeitado e valor devolvido ao saldo.', 'info');
+}
+function renderAdminVIPEditors() {
+const container = document.getElementById('admin-vips-editor');
+container.innerHTML = state.vipPackages.map(pkg => ⁠<div class="bg-dark-input border border-dark-border rounded-xl p-3 space-y-2 text-xs"> <div class="font-bold text-amber-400">Plano ID #${pkg.id}</div> <div class="grid grid-cols-2 gap-2"> <div> <label class="text-[10px] text-gray-400">Nome:</label> <input type="text" id="admin-vip-name-${pkg.id}" value="${pkg.name}" class="w-full bg-dark-card border border-dark-border rounded px-2 py-1"> </div> <div> <label class="text-[10px] text-gray-400">Preço (Kz):</label> <input type="number" id="admin-vip-price-${pkg.id}" value="${pkg.price}" class="w-full bg-dark-card border border-dark-border rounded px-2 py-1"> </div> </div> <div> <label class="text-[10px] text-gray-400">Retorno Diário (Kz):</label> <input type="number" id="admin-vip-return-${pkg.id}" value="${pkg.dailyReturn}" class="w-full bg-dark-card border border-dark-border rounded px-2 py-1"> </div> <button onclick="saveVIPPackage(${pkg.id})" class="w-full gold-gradient text-black font-bold py-1.5 rounded text-[10px]"> GUARDAR PACOTE ${pkg.id} </button> </div>⁠).join('');
+}
+async function saveVIPPackage(id) {
+const pkg = state.vipPackages.find(p => p.id === id);
+if (!pkg) return;
+pkg.name = document.getElementById(⁠admin-vip-name-${id}⁠).value;
+pkg.price = parseFloat(document.getElementById(⁠admin-vip-price-${id}⁠).value) || 0;
+pkg.dailyReturn = parseFloat(document.getElementById(⁠admin-vip-return-${id}⁠).value) || 0;
+await syncData('vips', 'packages', state.vipPackages);
+renderVIPPackages();
+showToast(⁠Plano VIP ${id} atualizado!⁠, 'success');
+}
+async function handleSaveSettings(e) {
+e.preventDefault();
+state.settings.holder = document.getElementById('admin-coord-holder').value;
+state.settings.iban = document.getElementById('admin-coord-iban').value;
+state.settings.phone = document.getElementById('admin-coord-phone').value;
+state.settings.whatsapp = document.getElementById('admin-whatsapp-link').value;
+await syncData('settings', 'config', state.settings);
+showToast('Definições salvas com sucesso!', 'success');
+}
+function formatKz(amount) {
+return new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA' })
+.format(amount || 0)
+.replace('AOA', 'Kz');
+}
+function copyToClipboard(elementId) {
+const text = document.getElementById(elementId).innerText;
+const tempInput = document.createElement('input');
+tempInput.value = text;
+document.body.appendChild(tempInput);
+tempInput.select();
+document.execCommand('copy');
+document.body.removeChild(tempInput);
+showToast('Copiado para a área de transferência!', 'info');
+}
+function showToast(message, type = 'info') {
+const container = document.getElementById('toast-container');
+const toast = document.createElement('div');
+const bgClass = type === 'success' ? 'bg-emerald-900/90 border-emerald-500 text-emerald-200' :
+type === 'error' ? 'bg-red-900/90 border-red-500 text-red-200' :
+'bg-amber-900/90 border-amber-500 text-amber-200';
+toast.className = ⁠p-3.5 rounded-xl border backdrop-blur-md shadow-xl text-xs font-semibold flex items-center space-x-2 transition-all duration-300 ${bgClass}⁠;
+toast.innerHTML = ⁠<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-bell'} text-sm"></i> <span>${message}</span>⁠;
+container.appendChild(toast);
+setTimeout(() => {
+toast.classList.add('opacity-0');
+setTimeout(() => toast.remove(), 300);
+}, 3500);
+}
+</script>
+<!-- INICIALIZAÇÃO DO FIREBASE COM AS SUAS CREDENCIAIS REAIS DO PROJECTO MONEY AZ -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-analytics.js";
+const firebaseConfig = {
+apiKey: "AIzaSyBtJWHosQ1iCwuh3sUIc9RgCXAcbwqC53Y",
+authDomain: "money-az-3b544.firebaseapp.com",
+projectId: "money-az-3b544",
+storageBucket: "money-az-3b544.firebasestorage.app",
+messagingSenderId: "1045948488781",
+appId: "1:1045948488781:web:39d8322847a26715005004",
+measurementId: "G-R0N203Q29M"
+};
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+</script>
+</body>
+</html>
